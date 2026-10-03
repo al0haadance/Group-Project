@@ -5,7 +5,10 @@
 <div class="glass-panel p-4 col-lg-7 mx-auto">
   <h2 class="mb-4">Налаштування порталу</h2>
 
-  {% if site_settings.background_image %}
+  {% if site_settings.background_video %}
+    <p class="text-muted small mb-2">Поточне відео:</p>
+    <video src="{{ site_settings.background_video.url }}" class="img-fluid rounded mb-4" style="max-height:220px;width:100%;object-fit:cover;" muted loop autoplay playsinline></video>
+  {% elif site_settings.background_image %}
     <p class="text-muted small mb-2">Поточний фон:</p>
     <img src="{{ site_settings.background_image.url }}" class="img-fluid rounded mb-4" style="max-height:220px;object-fit:cover;width:100%;">
   {% endif %}

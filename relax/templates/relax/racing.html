@@ -1,0 +1,280 @@
+{% extends 'base.html' %}
+{% block title %}Гонки{% endblock %}
+{% block content %}
+<div class="glass-panel p-4 mx-auto game-card game-card--racing" style="max-width: 520px;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="mb-0">🏎️ Гонки</h3>
+        <a href="{% url 'relax:home' %}" class="btn btn-ghost btn-sm">&laquo; Відпочинок</a>
+    </div>
+
+    <div class="d-flex justify-content-between mb-3">
+        <span class="score-pill">Рахунок: <span id="score">0</span></span>
+        <span class="score-pill">🏆 <span id="best">{{ my_best }}</span></span>
+    </div>
+
+    <div class="game-stage" id="stage" style="max-width:360px; margin:0 auto;">
+        <canvas id="game" width="360" height="500" style="width:100%; max-width:360px; display:block; margin:0 auto; background:#1a1d26;"></canvas>
+        <div id="gameOverMsg" class="game-overlay">
+            <span class="game-overlay-icon">💥</span>
+            <h4 class="mb-1">Аварія!</h4>
+            <p>Ти врізався у зустрічну машину.</p>
+            <span class="score-pill">🏆 Рекорд: <span id="overlayBest"></span></span>
+            <button id="restartBtn" class="btn btn-accent btn-sm">Зіграти ще раз</button>
+        </div>
+    </div>
+
+    <div class="game-controls text-muted small mt-3">
+        <span>Керування:</span>
+        <kbd class="key">←</kbd><kbd class="key">→</kbd>
+        <span class="mx-1">або</span>
+        <kbd class="key">A</kbd><kbd class="key">D</kbd>
+        <span class="ms-1">· на телефоні — тапай ліву/праву половину поля</span>
+    </div>
+</div>
+
+<script>
+(function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    const roadMargin = 30;
+    const laneCount = 3;
+    const roadLeft = roadMargin, roadRight = W - roadMargin;
+    const laneWidth = (roadRight - roadLeft) / laneCount;
+
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff8a4c';
+    const accent2 = getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#6ea8fe';
+
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const gameOverEl = document.getElementById('gameOverMsg');
+    const overlayBestEl = document.getElementById('overlayBest');
+    const stageEl = document.getElementById('stage');
+    let best = {{ my_best|default:0 }};
+
+    let player, obstacles, speed, distance, alive, dashOffset, rafId, lastTime, spawnTimer;
+
+    function laneX(laneIndex, width) {
+        return roadLeft + laneIndex * laneWidth + (laneWidth - width) / 2;
+    }
+
+    function reset() {
+        player = { lane: 1, width: 42, height: 70, x: 0, y: H - 110 };
+        player.x = laneX(player.lane, player.width);
+        obstacles = [];
+        speed = 220;          // пікселів за секунду
+        distance = 0;
+        dashOffset = 0;
+        spawnTimer = 0;
+        alive = true;
+        gameOverEl.classList.remove('show');
+        stageEl.classList.remove('is-crashed');
+        scoreEl.textContent = '0';
+        lastTime = performance.now();
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(loop);
+    }
+
+    function spawnObstacle() {
+        const lane = Math.floor(Math.random() * laneCount);
+        const width = 42;
+        obstacles.push({ lane, width, height: 70, x: laneX(lane, width), y: -90 });
+    }
+
+    function update(dt) {
+        distance += speed * dt;
+        speed = Math.min(560, 220 + distance * 0.012); // поступове прискорення
+
+        dashOffset = (dashOffset + speed * dt) % 60;
+
+        spawnTimer -= dt;
+        if (spawnTimer <= 0) {
+            spawnObstacle();
+            spawnTimer = Math.max(0.45, 1.1 - distance / 12000);
+        }
+
+        obstacles.forEach(o => { o.y += speed * dt; });
+        obstacles = obstacles.filter(o => o.y < H + 100);
+
+        for (const o of obstacles) {
+            const overlapX = Math.abs(o.x + o.width / 2 - (player.x + player.width / 2)) < (o.width + player.width) / 2 - 6;
+            const overlapY = Math.abs(o.y + o.height / 2 - (player.y + player.height / 2)) < (o.height + player.height) / 2 - 6;
+            if (overlapX && overlapY) {
+                endGame();
+                return;
+            }
+        }
+
+        const score = Math.floor(distance / 10);
+        scoreEl.textContent = score;
+    }
+
+    function roundRect(x, y, w, h, r, fill) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+    }
+
+    function shadeColor(hex, percent) {
+        const h = hex.replace('#', '');
+        const num = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+        let r = (num >> 16) + percent, g = ((num >> 8) & 0x00FF) + percent, b = (num & 0x0000FF) + percent;
+        r = Math.max(0, Math.min(255, r));
+        g = Math.max(0, Math.min(255, g));
+        b = Math.max(0, Math.min(255, b));
+        return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
+    }
+
+    function drawCar(x, y, w, h, color, facingDown) {
+        const cx = x + w / 2;
+        ctx.save();
+
+        // тінь під машиною
+        ctx.fillStyle = 'rgba(0,0,0,.35)';
+        ctx.beginPath();
+        ctx.ellipse(cx, y + h + 2, w * 0.52, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // колеса
+        const wheelW = 7, wheelH = 16;
+        ctx.fillStyle = '#15161c';
+        roundRect(x - 2, y + 8, wheelW, wheelH, 3, '#15161c');
+        roundRect(x - 2, y + h - 8 - wheelH, wheelW, wheelH, 3, '#15161c');
+        roundRect(x + w - wheelW + 2, y + 8, wheelW, wheelH, 3, '#15161c');
+        roundRect(x + w - wheelW + 2, y + h - 8 - wheelH, wheelW, wheelH, 3, '#15161c');
+
+        // корпус (градієнт для об'єму)
+        const grad = ctx.createLinearGradient(x, y, x + w, y);
+        grad.addColorStop(0, shadeColor(color, -25));
+        grad.addColorStop(0.5, shadeColor(color, 15));
+        grad.addColorStop(1, shadeColor(color, -25));
+        roundRect(x, y, w, h, 10, grad);
+
+        // блик на капоті
+        ctx.fillStyle = 'rgba(255,255,255,.18)';
+        roundRect(x + w * 0.14, y + 4, w * 0.18, h - 8, 6, 'rgba(255,255,255,.18)');
+
+        // лобове/заднє скло
+        const glassTopY = facingDown ? y + h - 24 : y + 8;
+        ctx.fillStyle = 'rgba(20,26,38,.85)';
+        roundRect(x + 6, glassTopY, w - 12, 16, 5, 'rgba(20,26,38,.85)');
+
+        // фари / стопи
+        ctx.fillStyle = facingDown ? '#ff5b5b' : '#ffe27a';
+        roundRect(x + 4, y + 2, 8, 5, 2, ctx.fillStyle);
+        roundRect(x + w - 12, y + 2, 8, 5, 2, ctx.fillStyle);
+        ctx.fillStyle = facingDown ? '#ffe27a' : '#ff5b5b';
+        roundRect(x + 4, y + h - 7, 8, 5, 2, ctx.fillStyle);
+        roundRect(x + w - 12, y + h - 7, 8, 5, 2, ctx.fillStyle);
+
+        // центральна смуга даху
+        ctx.fillStyle = 'rgba(0,0,0,.18)';
+        ctx.fillRect(cx - 2, y + 10, 4, h - 20);
+
+        ctx.restore();
+    }
+
+    function draw() {
+        ctx.fillStyle = '#1a1d26';
+        ctx.fillRect(0, 0, W, H);
+
+        // узбіччя
+        ctx.fillStyle = '#242833';
+        ctx.fillRect(0, 0, roadLeft, H);
+        ctx.fillRect(roadRight, 0, W - roadRight, H);
+
+        // дорога
+        ctx.fillStyle = '#33384a';
+        ctx.fillRect(roadLeft, 0, roadRight - roadLeft, H);
+
+        // розмітка смуг (пунктир, що біжить вниз)
+        ctx.strokeStyle = 'rgba(255,255,255,.35)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([22, 18]);
+        for (let i = 1; i < laneCount; i++) {
+            const x = roadLeft + i * laneWidth;
+            ctx.beginPath();
+            ctx.lineDashOffset = -dashOffset;
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, H);
+            ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        // машини-перешкоди (їдуть назустріч — розвернуті)
+        obstacles.forEach(o => drawCar(o.x, o.y, o.width, o.height, accent2, false));
+
+        // гравець
+        drawCar(player.x, player.y, player.width, player.height, accent, true);
+    }
+
+    function loop(now) {
+        if (!alive) return;
+        const dt = Math.min(0.05, (now - lastTime) / 1000);
+        lastTime = now;
+        update(dt);
+        draw();
+        if (alive) rafId = requestAnimationFrame(loop);
+    }
+
+    function endGame() {
+        alive = false;
+        cancelAnimationFrame(rafId);
+        const finalScore = Math.floor(distance / 10);
+        if (finalScore > best) {
+            best = finalScore;
+            bestEl.textContent = best;
+        }
+        overlayBestEl.textContent = best;
+        gameOverEl.classList.add('show');
+        stageEl.classList.add('is-crashed');
+        submitScore(finalScore);
+    }
+
+    function submitScore(finalScore) {
+        {% if user.is_authenticated %}
+        const csrftoken = document.cookie.split('; ').find(r => r.startsWith('csrftoken='));
+        fetch("{% url 'relax:submit_score' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken ? csrftoken.split('=')[1] : '',
+            },
+            body: JSON.stringify({ score: finalScore, game: 'racing' }),
+        }).then(r => r.json()).then(data => {
+            if (data.ok) bestEl.textContent = data.best_score;
+        }).catch(() => {});
+        {% endif %}
+    }
+
+    function moveLane(delta) {
+        if (!alive) return;
+        player.lane = Math.max(0, Math.min(laneCount - 1, player.lane + delta));
+        player.x = laneX(player.lane, player.width);
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (['ArrowLeft', 'a', 'A'].includes(e.key)) { moveLane(-1); e.preventDefault(); }
+        if (['ArrowRight', 'd', 'D'].includes(e.key)) { moveLane(1); e.preventDefault(); }
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const tapX = e.touches[0].clientX - rect.left;
+        moveLane(tapX < rect.width / 2 ? -1 : 1);
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', reset);
+
+    reset();
+    draw();
+})();
+</script>
+{% endblock %}

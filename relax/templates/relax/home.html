@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Відпочинок{% endblock %}
+{% block content %}
+<div class="glass-panel p-4 mb-4">
+    <h2 class="mb-1">Відпочинок</h2>
+    <p class="text-muted mb-0">Невеличка перерва між парами — обери гру.</p>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="glass-panel game-card game-card--snake">
+            <span class="game-emoji">🐍</span>
+            <h4>Змійка</h4>
+            <p class="text-muted">Класика: збирай їжу, рости і не влучай у стіни та власний хвіст.</p>
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="{% url 'relax:snake' %}" class="btn btn-accent">Грати</a>
+                {% if user.is_authenticated %}
+                <span class="score-pill">🏆 {{ my_snake_best.best_score|default:0 }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="glass-panel game-card game-card--racing">
+            <span class="game-emoji">🏎️</span>
+            <h4>Гонки</h4>
+            <p class="text-muted">Ухиляйся від зустрічних машин, тримай смугу і набирай швидкість.</p>
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="{% url 'relax:racing' %}" class="btn btn-accent">Грати</a>
+                {% if user.is_authenticated %}
+                <span class="score-pill">🏆 {{ my_racing_best.best_score|default:0 }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="glass-panel p-4">
+            <h5 class="mb-3">🐍 Лідери — Змійка</h5>
+            {% if top_snake %}
+            <ol class="list-group list-group-numbered">
+                {% for s in top_snake %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    {{ s.user.username }}
+                    <span class="badge text-bg-secondary">{{ s.best_score }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <p class="text-muted mb-0">Ще ніхто не грав — будь першим!</p>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="glass-panel p-4">
+            <h5 class="mb-3">🏎️ Лідери — Гонки</h5>
+            {% if top_racing %}
+            <ol class="list-group list-group-numbered">
+                {% for s in top_racing %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    {{ s.user.username }}
+                    <span class="badge text-bg-secondary">{{ s.best_score }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <p class="text-muted mb-0">Ще ніхто не грав — будь першим!</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

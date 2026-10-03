@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+{% block title %}Змійка{% endblock %}
+{% block content %}
+<div class="glass-panel p-4 mx-auto game-card game-card--snake" style="max-width: 520px;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="mb-0">🐍 Змійка</h3>
+        <a href="{% url 'relax:home' %}" class="btn btn-ghost btn-sm">&laquo; Відпочинок</a>
+    </div>
+
+    <div class="d-flex justify-content-between mb-3">
+        <span class="score-pill">Рахунок: <span id="score">0</span></span>
+        <span class="score-pill">🏆 <span id="best">{{ my_best }}</span></span>
+    </div>
+
+    <div class="game-stage" id="stage" style="max-width:400px; margin:0 auto;">
+        <canvas id="game" width="400" height="400" style="width:100%; max-width:400px; display:block; margin:0 auto; background:#0f1117;"></canvas>
+        <div id="gameOverMsg" class="game-overlay">
+            <span class="game-overlay-icon">🐍</span>
+            <h4 class="mb-1">Гру закінчено!</h4>
+            <p>Змійка влучила у стіну або власний хвіст.</p>
+            <span class="score-pill">🏆 Рекорд: <span id="overlayBest"></span></span>
+            <button id="restartBtn" class="btn btn-accent btn-sm">Зіграти ще раз</button>
+        </div>
+    </div>
+
+    <div class="game-controls text-muted small mt-3">
+        <span>Керування:</span>
+        <kbd class="key">↑</kbd><kbd class="key">↓</kbd><kbd class="key">←</kbd><kbd class="key">→</kbd>
+        <span class="mx-1">або</span>
+        <kbd class="key">W</kbd><kbd class="key">A</kbd><kbd class="key">S</kbd><kbd class="key">D</kbd>
+        <span class="ms-1">· на телефоні — свайпи по полю</span>
+    </div>
+</div>
+
+<script>
+(function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const cell = 20;
+    const cols = canvas.width / cell;
+    const rows = canvas.height / cell;
+
+    let snake, direction, nextDirection, food, score, best, alive, timer;
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const gameOverEl = document.getElementById('gameOverMsg');
+    const overlayBestEl = document.getElementById('overlayBest');
+    const stageEl = document.getElementById('stage');
+
+    best = {{ my_best|default:0 }};
+
+    function randomFood() {
+        let pos;
+        do {
+            pos = {
+                x: Math.floor(Math.random() * cols),
+                y: Math.floor(Math.random() * rows),
+            };
+        } while (snake.some(s => s.x === pos.x && s.y === pos.y));
+        return pos;
+    }
+
+    function reset() {
+        snake = [{ x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }];
+        direction = { x: 1, y: 0 };
+        nextDirection = { x: 1, y: 0 };
+        food = randomFood();
+        score = 0;
+        alive = true;
+        scoreEl.textContent = score;
+        gameOverEl.classList.remove('show');
+        stageEl.classList.remove('is-crashed');
+        if (timer) clearInterval(timer);
+        timer = setInterval(tick, 110);
+    }
+
+    function tick() {
+        direction = nextDirection;
+        const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
+
+        const hitWall = head.x < 0 || head.y < 0 || head.x >= cols || head.y >= rows;
+        const hitSelf = snake.some(s => s.x === head.x && s.y === head.y);
+
+        if (hitWall || hitSelf) {
+            endGame();
+            return;
+        }
+
+        snake.unshift(head);
+        if (head.x === food.x && head.y === food.y) {
+            score += 10;
+            scoreEl.textContent = score;
+            food = randomFood();
+        } else {
+            snake.pop();
+        }
+        draw();
+    }
+
+    function shadeColor(hex, percent) {
+        const h = hex.replace('#', '').trim();
+        const num = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+        let r = (num >> 16) + percent, g = ((num >> 8) & 0x00FF) + percent, b = (num & 0x0000FF) + percent;
+        r = Math.max(0, Math.min(255, r));
+        g = Math.max(0, Math.min(255, g));
+        b = Math.max(0, Math.min(255, b));
+        return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
+    }
+
+    function roundedSquare(px, py, size, r, fill) {
+        ctx.beginPath();
+        ctx.moveTo(px + r, py);
+        ctx.arcTo(px + size, py, px + size, py + size, r);
+        ctx.arcTo(px + size, py + size, px, py + size, r);
+        ctx.arcTo(px, py + size, px, py, r);
+        ctx.arcTo(px, py, px + size, py, r);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+    }
+
+    function draw() {
+        ctx.fillStyle = '#0f1117';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // легка сітка поля
+        ctx.strokeStyle = 'rgba(255,255,255,.03)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < cols; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * cell, 0);
+            ctx.lineTo(i * cell, canvas.height);
+            ctx.stroke();
+        }
+        for (let j = 1; j < rows; j++) {
+            ctx.beginPath();
+            ctx.moveTo(0, j * cell);
+            ctx.lineTo(canvas.width, j * cell);
+            ctx.stroke();
+        }
+
+        const accentColor = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#ff8a4c').trim();
+        const accent2Color = (getComputedStyle(document.documentElement).getPropertyValue('--accent-2') || '#6ea8fe').trim();
+
+        // їжа — яблучко з блиском і черешком
+        const fx = food.x * cell + cell / 2, fy = food.y * cell + cell / 2;
+        ctx.save();
+        ctx.shadowColor = accentColor;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = accentColor;
+        ctx.beginPath();
+        ctx.arc(fx, fy + 1, cell / 2 - 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = 'rgba(255,255,255,.5)';
+        ctx.beginPath();
+        ctx.arc(fx - 3, fy - 2, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#6b4a2f';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(fx + 2, fy - cell / 2 + 4);
+        ctx.lineTo(fx + 4, fy - cell / 2);
+        ctx.stroke();
+
+        // тіло змійки — сегменти зі скругленням і градієнтом від голови до хвоста
+        for (let i = snake.length - 1; i >= 0; i--) {
+            const seg = snake[i];
+            const t = i / Math.max(1, snake.length - 1);
+            const color = i === 0 ? accent2Color : shadeColor(accent2Color, -Math.round(t * 90) + 10);
+            const px = seg.x * cell, py = seg.y * cell;
+            roundedSquare(px + 1, py + 1, cell - 2, i === 0 ? 7 : 5, color);
+        }
+
+        // очі та язичок на голові
+        const head = snake[0];
+        const hx = head.x * cell, hy = head.y * cell;
+        const eyeOffsetX = direction.x !== 0 ? direction.x * 4 : 0;
+        const eyeOffsetY = direction.y !== 0 ? direction.y * 4 : 0;
+        ctx.fillStyle = '#0f1117';
+        [-1, 1].forEach(side => {
+            const perpX = direction.y !== 0 ? side * 4 : 0;
+            const perpY = direction.x !== 0 ? side * 4 : 0;
+            ctx.beginPath();
+            ctx.arc(hx + cell / 2 + eyeOffsetX + perpX, hy + cell / 2 + eyeOffsetY + perpY, 2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        if (alive) {
+            ctx.strokeStyle = '#ff6b6b';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            const tx = hx + cell / 2 + direction.x * (cell / 2 + 3);
+            const ty = hy + cell / 2 + direction.y * (cell / 2 + 3);
+            ctx.moveTo(hx + cell / 2 + direction.x * cell / 2, hy + cell / 2 + direction.y * cell / 2);
+            ctx.lineTo(tx, ty);
+            ctx.stroke();
+        }
+    }
+
+    function endGame() {
+        alive = false;
+        clearInterval(timer);
+        if (score > best) {
+            best = score;
+            bestEl.textContent = best;
+        }
+        overlayBestEl.textContent = best;
+        gameOverEl.classList.add('show');
+        stageEl.classList.add('is-crashed');
+        submitScore(score);
+    }
+
+    function submitScore(finalScore) {
+        {% if user.is_authenticated %}
+        const csrftoken = document.cookie.split('; ').find(r => r.startsWith('csrftoken='));
+        fetch("{% url 'relax:submit_score' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken ? csrftoken.split('=')[1] : '',
+            },
+            body: JSON.stringify({ score: finalScore, game: 'snake' }),
+        }).then(r => r.json()).then(data => {
+            if (data.ok) {
+                bestEl.textContent = data.best_score;
+            }
+        }).catch(() => {});
+        {% endif %}
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (!alive) return;
+        const map = {
+            ArrowUp: { x: 0, y: -1 }, w: { x: 0, y: -1 }, W: { x: 0, y: -1 },
+            ArrowDown: { x: 0, y: 1 }, s: { x: 0, y: 1 }, S: { x: 0, y: 1 },
+            ArrowLeft: { x: -1, y: 0 }, a: { x: -1, y: 0 }, A: { x: -1, y: 0 },
+            ArrowRight: { x: 1, y: 0 }, d: { x: 1, y: 0 }, D: { x: 1, y: 0 },
+        };
+        const d = map[e.key];
+        if (!d) return;
+        if (d.x === -direction.x && d.y === -direction.y) return; // не даём развернуться на 180°
+        nextDirection = d;
+        e.preventDefault();
+    });
+
+    let touchStart = null;
+    canvas.addEventListener('touchstart', (e) => {
+        touchStart = e.touches[0];
+    });
+    canvas.addEventListener('touchend', (e) => {
+        if (!touchStart || !alive) return;
+        const dx = e.changedTouches[0].clientX - touchStart.clientX;
+        const dy = e.changedTouches[0].clientY - touchStart.clientY;
+        let d;
+        if (Math.abs(dx) > Math.abs(dy)) {
+            d = dx > 0 ? { x: 1, y: 0 } : { x: -1, y: 0 };
+        } else {
+            d = dy > 0 ? { x: 0, y: 1 } : { x: 0, y: -1 };
+        }
+        if (!(d.x === -direction.x && d.y === -direction.y)) {
+            nextDirection = d;
+        }
+        touchStart = null;
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', reset);
+
+    reset();
+    draw();
+})();
+</script>
+{% endblock %}

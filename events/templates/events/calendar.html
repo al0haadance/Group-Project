@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Календар подій{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a class="btn btn-outline-secondary btn-sm" href="?year={{ prev_year }}&month={{ prev_month }}">&laquo; Попередній</a>
+    <div class="text-center">
+        <h3 class="mb-0">{{ month_name }} {{ year }}</h3>
+        <a href="{% url 'events:list' %}" class="small text-muted">список подій</a>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="?year={{ next_year }}&month={{ next_month }}">Наступний &raquo;</a>
+</div>
+
+{% if can_manage %}
+<div class="mb-3">
+    <a class="btn btn-accent" href="{% url 'events:create' %}">+ Додати подію</a>
+    <span class="text-muted small ms-2">Редагувати календар може лише адміністратор.</span>
+</div>
+{% endif %}
+
+<div class="glass-panel p-2 p-md-3">
+<table class="table table-bordered text-center align-top mb-0">
+    <thead>
+        <tr>
+            <th>Пн</th><th>Вт</th><th>Ср</th><th>Чт</th><th>Пт</th><th>Сб</th><th>Нд</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for week in weeks %}
+        <tr>
+            {% for day in week %}
+            <td style="height:100px; width:14.28%;" class="{% if not day.in_month %}text-muted{% endif %} {% if day.is_today %}border border-2{% endif %}" {% if day.is_today %}style="border-color: var(--accent) !important;"{% endif %}>
+                <div class="fw-bold small">{{ day.date.day }}</div>
+                {% for ev in day.events %}
+                    <a href="{% url 'events:detail' ev.pk %}" class="d-block small text-truncate badge text-bg-info mb-1" title="{{ ev.title }}">
+                        {{ ev.title }}
+                    </a>
+                {% endfor %}
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

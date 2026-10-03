@@ -21,6 +21,10 @@ class SiteSettings(models.Model):
     background_image = models.ImageField(
         upload_to='site/', blank=True, null=True, verbose_name='Фонове зображення'
     )
+    background_video = models.FileField(
+        upload_to='site/video/', blank=True, null=True, verbose_name='Фонове відео',
+        help_text='Якщо завантажено — відео показується замість фото (mp4, без звуку, в циклі).'
+    )
     overlay_opacity = models.PositiveIntegerField(
         default=55,
         verbose_name='Затемнення фону (%)',

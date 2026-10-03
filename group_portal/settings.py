@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'announcements',
     'gallery',
     'portfolio',
+    'relax',
 ]
 
 MIDDLEWARE = [

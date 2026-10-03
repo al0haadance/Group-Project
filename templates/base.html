@@ -23,7 +23,12 @@
 </head>
 <body>
 
-{% if site_settings.background_image %}
+{% if site_settings.background_video %}
+<video class="site-background site-background--video" autoplay muted loop playsinline>
+    <source src="{{ site_settings.background_video.url }}" type="video/mp4">
+</video>
+<div class="site-overlay" style="background-color: rgba(10, 12, 20, {{ site_settings.overlay_opacity }}e-2);"></div>
+{% elif site_settings.background_image %}
 <div class="site-background" style="background-image: url('{{ site_settings.background_image.url }}');"></div>
 <div class="site-overlay" style="background-color: rgba(10, 12, 20, {{ site_settings.overlay_opacity }}e-2);"></div>
 {% else %}
@@ -47,6 +52,7 @@
                 <li class="nav-item"><a class="nav-link" href="{% url 'announcements:list' %}">Оголошення</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'gallery:list' %}">Галерея</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'portfolio:list' %}">Портфоліо</a></li>
+                <li class="nav-item"><a class="nav-link" href="{% url 'relax:home' %}">Відпочинок</a></li>
             </ul>
             <ul class="navbar-nav align-items-lg-center">
                 {% if user.is_authenticated %}

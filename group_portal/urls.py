@@ -14,6 +14,7 @@ urlpatterns = [
     path('announcements/', include('announcements.urls')),
     path('gallery/', include('gallery.urls')),
     path('portfolio/', include('portfolio.urls')),
+    path('relax/', include('relax.urls')),
 ]
 
 if settings.DEBUG:

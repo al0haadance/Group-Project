@@ -4,7 +4,7 @@
 <h2>{{ event.title }}</h2>
 <p class="text-muted">{{ event.date|date:"d.m.Y H:i" }}{% if event.location %} · {{ event.location }}{% endif %}</p>
 <p style="white-space: pre-line;">{{ event.description }}</p>
-{% if user.is_authenticated and user.is_moderator %}
+{% if user.is_authenticated and user.is_admin_role %}
   <a href="{% url 'events:edit' event.pk %}" class="btn btn-outline-secondary btn-sm">Редагувати</a>
   <a href="{% url 'events:delete' event.pk %}" class="btn btn-outline-danger btn-sm">Видалити</a>
 {% endif %}
